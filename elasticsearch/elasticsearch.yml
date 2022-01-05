@@ -1,0 +1,15 @@
+# Cluster name
+cluster.name: "docker-cluster"
+
+# Network host
+network.host: 0.0.0.0
+
+# License
+xpack.license.self_generated.type: trial
+
+# Monitoring
+xpack.monitoring.collection.enabled: true
+
+# Security
+xpack.security.enabled: true
+

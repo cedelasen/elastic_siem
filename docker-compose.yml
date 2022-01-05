@@ -1,0 +1,170 @@
+version: "3.8"
+services:
+  
+  elasticsearch01:
+    build:
+      context: elasticsearch/
+      args:
+        ELK_VERSION: ${ELK_VERSION:-7.10.1}
+    volumes:
+      - type: bind
+        source: ./elasticsearch/elasticsearch.yml
+        target: /usr/share/elasticsearch/config/elasticsearch.yml
+        read_only: true
+      - ./elasticsearch/data/elasticsearch01:/usr/share/elasticsearch/data
+    environment:
+      - node.name=elasticsearch01
+      - discovery.seed_hosts=elasticsearch02,elasticsearch03
+      - cluster.initial_master_nodes=elasticsearch01,elasticsearch02
+      - bootstrap.memory_lock=true      
+      - node.roles=master
+      - "ES_JAVA_OPTS=-Xms${ES_HEAP_SIZE:-512m} -Xmx${ES_HEAP_SIZE:-512m}"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  elasticsearch02:
+    build:
+      context: elasticsearch/
+      args:
+        ELK_VERSION: ${ELK_VERSION:-7.10.1}
+    volumes:
+      - type: bind
+        source: ./elasticsearch/elasticsearch.yml
+        target: /usr/share/elasticsearch/config/elasticsearch.yml
+        read_only: true
+      - ./elasticsearch/data/elasticsearch02:/usr/share/elasticsearch/data
+    environment:
+      - node.name=elasticsearch02
+      - discovery.seed_hosts=elasticsearch01,elasticsearch03
+      - cluster.initial_master_nodes=elasticsearch01,elasticsearch02
+      - bootstrap.memory_lock=true
+      - node.roles=master
+      - "ES_JAVA_OPTS=-Xms${ES_HEAP_SIZE:-512m} -Xmx${ES_HEAP_SIZE:-512m}"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  elasticsearch03:
+    build:
+      context: elasticsearch/
+      args:
+        ELK_VERSION: ${ELK_VERSION:-7.10.1}
+    volumes:
+      - type: bind
+        source: ./elasticsearch/elasticsearch.yml
+        target: /usr/share/elasticsearch/config/elasticsearch.yml
+        read_only: true
+      - ./elasticsearch/data/elasticsearch03:/usr/share/elasticsearch/data
+    environment:
+      - node.name=elasticsearch03
+      - discovery.seed_hosts=elasticsearch01,elasticsearch02
+      - cluster.initial_master_nodes=elasticsearch01,elasticsearch02
+      - bootstrap.memory_lock=true   
+      - node.roles=data,ingest
+      - "ES_JAVA_OPTS=-Xms${ES_HEAP_SIZE:-512m} -Xmx${ES_HEAP_SIZE:-512m}"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  kibana:
+    build:
+      context: kibana/
+      args:
+        ELK_VERSION: ${ELK_VERSION:-7.10.1}
+    volumes:
+      - type: bind
+        source: ./kibana/kibana.yml
+        target: /usr/share/kibana/config/kibana.yml
+        read_only: true
+    depends_on:
+      - elasticsearch01
+      - elasticsearch02
+      - elasticsearch03
+
+  web_server:
+    build:
+      context: ./nginx
+    restart: always
+    ports:
+      - 80:80
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+
+  auditbeat:
+    build:
+      context: auditbeat/
+      args:
+        ELK_VERSION: ${ELK_VERSION:-7.10.1}
+    command: -e --strict.perms=false
+    restart: always
+    volumes:
+      - type: bind
+        source: ./auditbeat/auditbeat.docker.yml
+        target: /usr/share/auditbeat/auditbeat.yml
+        read_only: true
+    user: root
+    cap_add:
+      - AUDIT_CONTROL
+      - AUDIT_READ
+    pid: host
+    depends_on:
+      - elasticsearch01
+      - elasticsearch02
+      - elasticsearch03
+      - kibana
+    
+  filebeat:
+    build:
+      context: filebeat/
+      args:
+        ELK_VERSION: ${ELK_VERSION:-7.10.1}
+    command: -e --strict.perms=false
+    restart: always
+    volumes:
+      - type: bind
+        source: ./filebeat/filebeat.docker.yml
+        target: /usr/share/filebeat/filebeat.yml
+        read_only: true
+      - type: bind
+        source: /var/lib/docker/containers
+        target: /var/lib/docker/containers
+        read_only: true
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
+    user: root
+    depends_on:
+      - elasticsearch01
+      - elasticsearch02
+      - elasticsearch03
+      - kibana
+
+  packetbeat:
+    build:
+      context: packetbeat/
+      args:
+        ELK_VERSION: ${ELK_VERSION:-7.10.1}
+    command: -e --strict.perms=false
+    restart: always
+    volumes:
+      - type: bind
+        source: ./packetbeat/packetbeat.docker.yml
+        target: /usr/share/packetbeat/packetbeat.yml
+        read_only: true
+    user: packetbeat
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    network_mode: host
+    depends_on:
+      - elasticsearch01
+      - elasticsearch02
+      - elasticsearch03
+      - kibana
+
+
